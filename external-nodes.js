@@ -350,4 +350,109 @@ window.AGGM_CUSTOM_NODES = {
     pyLogic: `def compute_ask_pollinations(inputs, node):\n    prompt = inputs.get("prompt") or node.get("value", "")\n    if not prompt:\n        return None\n    try:\n        import requests\n        from urllib.parse import quote\n        encoded_prompt = quote(prompt)\n        url = f"https://text.pollinations.ai/{encoded_prompt}"\n        response = requests.get(url)\n        response.raise_for_status()\n        return response.text\n    except Exception as e:\n        print(f"PollinationsError: {e}")\n        return None`,
     pyImports: ['requests', 'from urllib.parse import quote'],
   },
+MarkDownRendererNode: {
+  definition: {
+    title: "Markdown Renderer",
+    inputs: ["markdown"],
+    outputs: ["html"],
+    defaultValue: "# Hello\nThis is **bold**, *italic*, and a list:\n- Item 1\n- Item 2",
+    
+    renderContent(node) {
+      if (node.value === undefined) node.value = this.defaultValue;
+      return `
+        <div class="node-content" style="padding:10px;">
+          <textarea class="node-input text-input" rows="6" style="width:100%; background:#111; color:white;">${node.value}</textarea>
+          <div style="margin-top: 10px; font-size:0.9rem; color:#aaa;">Preview:</div>
+          <div class="markdown-preview" style="padding:8px; background:#000; color:#fff; border:1px solid #555; max-height:150px; overflow:auto;"></div>
+        </div>`;
+    },
+
+    update(node) {
+      const textarea = node.dom.querySelector('textarea.text-input');
+      const preview = node.dom.querySelector('.markdown-preview');
+      if (textarea) {
+        node.value = textarea.value;
+        if (preview) preview.innerHTML = this.renderMarkdown(node.value);
+      }
+    },
+
+    getOutput() {
+      return this.renderMarkdown(this.value || "");
+    },
+
+    renderMarkdown(text) {
+      if (typeof text !== 'string') return '';
+
+      let html = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+      // Headers
+      html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
+      html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
+      html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+      html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+      html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+      html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+
+      // Bold and Italic
+      html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+      html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+
+      // Lists
+      html = html.replace(/^- (.*$)/gim, '<li>$1</li>');
+      if (html.includes('<li>')) {
+        html = html.replace(/(<li>.*<\/li>)/gims, '<ul>$1</ul>');
+      }
+
+      // Line breaks
+      html = html.replace(/\n/g, '<br>');
+
+      return html.trim();
+    },
+  },
+
+  jsLogic: `function() {
+    const renderMarkdown = (text) => {
+      if (typeof text !== 'string') return '';
+      let html = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      html = html.replace(/^###### (.*$)/gim, '<h6>$1</h6>');
+      html = html.replace(/^##### (.*$)/gim, '<h5>$1</h5>');
+      html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+      html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+      html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+      html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+      html = html.replace(/\\*\\*(.*?)\\*\\*/gim, '<strong>$1</strong>');
+      html = html.replace(/\\*(.*?)\\*/gim, '<em>$1</em>');
+      html = html.replace(/^- (.*$)/gim, '<li>$1</li>');
+      if (html.includes('<li>')) {
+        html = html.replace(/(<li>.*<\\/li>)/gims, '<ul>$1</ul>');
+      }
+      html = html.replace(/\\n/g, '<br>');
+      return html.trim();
+    };
+    return renderMarkdown(this.value || "");
+  }`,
+
+  pyLogic: `def compute_markdown_renderer(inputs):
+    md = inputs.get("markdown", "")
+    if not isinstance(md, str): return ""
+    import re
+    def esc(s): return s.replace("<", "&lt;").replace(">", "&gt;")
+    html = esc(md)
+    html = re.sub(r'^###### (.*)', r'<h6>\\1</h6>', html, flags=re.MULTILINE)
+    html = re.sub(r'^##### (.*)', r'<h5>\\1</h5>', html, flags=re.MULTILINE)
+    html = re.sub(r'^#### (.*)', r'<h4>\\1</h4>', html, flags=re.MULTILINE)
+    html = re.sub(r'^### (.*)', r'<h3>\\1</h3>', html, flags=re.MULTILINE)
+    html = re.sub(r'^## (.*)', r'<h2>\\1</h2>', html, flags=re.MULTILINE)
+    html = re.sub(r'^# (.*)', r'<h1>\\1</h1>', html, flags=re.MULTILINE)
+    html = re.sub(r'\\*\\*(.*?)\\*\\*', r'<strong>\\1</strong>', html)
+    html = re.sub(r'\\*(.*?)\\*', r'<em>\\1</em>', html)
+    html = re.sub(r'^- (.*)', r'<li>\\1</li>', html, flags=re.MULTILINE)
+    html = re.sub(r'(</li>\\n<li>)', '</li><li>', html)
+    if '<li>' in html: html = '<ul>' + html + '</ul>'
+    html = html.replace('\\n', '<br>')
+    return html`,
+
+  pyImports: ['import re'],
+}
+
 };
