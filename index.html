@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Aggm Nodes</title>
+<title>Aggm Nodes (Extensible)</title>
 
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#000000"/>
@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Aggm Nodes">
 <link rel="apple-touch-icon" href="icon-192x192.png">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.0/jszip.min.js"></script>
 <style>
   :root {
     --bg-color: #000000;
@@ -385,396 +385,139 @@
   <div class="context-menu-item" data-action="duplicate">Duplicate Node</div>
 </div>
 
-<script>
+<!-- IMPORTANT: This file provides the ability to add custom nodes -->
+<script src="external-nodes.js" defer></script>
 
-  const nodeTypes = {
+<script>
+// This main script will now wait for the external-nodes.js file to load
+document.addEventListener('DOMContentLoaded', () => {
+
+  const nodeTypes = {};
+
+  const BUILTIN_NODE_DEFINITIONS = {
     NumberNode: {
-      title: "Number",
-      inputs: [],
-      outputs: ["value"],
-      renderContent(node) {
-        if (node.value === undefined) node.value = 0;
-        return `<div class="node-content"><input class="node-input number-input" type="number" value="${node.value}" /></div>`;
+      definition: {
+          title: "Number",
+          inputs: [],
+          outputs: ["value"],
+          renderContent(node) {
+            if (node.value === undefined) node.value = 0;
+            return `<div class="node-content"><input class="node-input number-input" type="number" value="${node.value}" /></div>`;
+          },
+          update(node) {
+            const input = node.dom.querySelector('input.number-input');
+            if (input) node.value = Number(input.value);
+          },
+          getOutput() { return this.value; }
       },
-      update(node) {
-        const input = node.dom.querySelector('input.number-input');
-        if (input) node.value = Number(input.value);
-      },
-      getOutput() {
-        return this.value;
-      }
+      jsLogic: `function() { return this.value; }`,
+      pyLogic: `def get_output_number(node):\n    return node.get("value", 0)`,
+      pyImports: [],
     },
     TextNode: {
-      title: "Text",
-      inputs: [],
-      outputs: ["text"],
-      renderContent(node) {
-        if (node.value === undefined) node.value = "";
-        return `<div class="node-content"><input class="node-input text-input" type="text" value="${node.value}" placeholder="Enter text..." /></div>`;
+      definition: {
+          title: "Text",
+          inputs: [],
+          outputs: ["text"],
+          renderContent(node) {
+            if (node.value === undefined) node.value = "";
+            return `<div class="node-content"><input class="node-input text-input" type="text" value="${node.value}" placeholder="Enter text..." /></div>`;
+          },
+          update(node) {
+            const input = node.dom.querySelector('input.text-input');
+            if (input) node.value = input.value;
+          },
+          getOutput() { return this.value; }
       },
-      update(node) {
-        const input = node.dom.querySelector('input.text-input');
-        if (input) node.value = input.value;
-      },
-      getOutput() {
-        return this.value;
-      }
-    },
-    TitleNode: {
-        title: "Title",
-        inputs: [],
-        outputs: ["html"],
-        renderContent(node) {
-            if (node.value === undefined) node.value = { content: "Title", fontSize: "2em", fontFamily: "Arial" };
-            const fonts = ["Arial", "Verdana", "Georgia", "Times New Roman", "Courier New"];
-            const sizes = ["1.5em", "2em", "2.5em", "3em"];
-            return `
-                <div class="node-content" style="padding: 10px 0;">
-                    <input class="node-input" type="text" value="${node.value.content}" placeholder="Title content..." />
-                    <select class="node-input" style="margin-top: 5px;">
-                        ${sizes.map(s => `<option value="${s}" ${node.value.fontSize === s ? 'selected' : ''}>${s}</option>`).join('')}
-                    </select>
-                    <select class="node-input" style="margin-top: 5px;">
-                        ${fonts.map(f => `<option value="${f}" ${node.value.fontFamily === f ? 'selected' : ''}>${f}</option>`).join('')}
-                    </select>
-                </div>
-            `;
-        },
-        update(node) {
-            const inputs = node.dom.querySelectorAll('.node-input');
-            node.value = {
-                content: inputs[0].value,
-                fontSize: inputs[1].value,
-                fontFamily: inputs[2].value
-            };
-        },
-        getOutput() {
-            return `<h1 style="font-size: ${this.value.fontSize}; font-family: '${this.value.fontFamily}', sans-serif;">${this.value.content}</h1>`;
-        }
-    },
-    ParagraphNode: {
-        title: "Paragraph",
-        inputs: [],
-        outputs: ["html"],
-        renderContent(node) {
-            if (node.value === undefined) node.value = "This is a paragraph.";
-            return `<div class="node-content" style="padding: 5px 0;"><textarea class="node-input" rows="3" style="min-height: 50px;">${node.value}</textarea></div>`;
-        },
-        update(node) {
-            node.value = node.dom.querySelector('textarea').value;
-        },
-        getOutput() {
-            return `<p style="margin: 0; padding: 0;">${this.value}</p>`;
-        }
-    },
-    CurrentDateNode: {
-        title: "Current Date",
-        inputs: [],
-        outputs: ["dateString"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;"></div>`;
-        },
-        getOutput() {
-            const date = new Date();
-            return date.getFullYear() + '-' + 
-                   String(date.getMonth() + 1).padStart(2, '0') + '-' + 
-                   String(date.getDate()).padStart(2, '0');
-        }
-    },
-    CurrentTimeNode: {
-        title: "Current Time",
-        inputs: [],
-        outputs: ["timeString"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;"></div>`;
-        },
-        getOutput() {
-            const date = new Date();
-            return String(date.getHours()).padStart(2, '0') + ':' + 
-                   String(date.getMinutes()).padStart(2, '0') + ':' + 
-                   String(date.getSeconds()).padStart(2, '0');
-        }
-    },
-    SplitterNode: {
-        title: "Splitter",
-        inputs: ["input"],
-        outputs(node) {
-            if (node.outputCount === undefined) node.outputCount = 2;
-            return Array.from({ length: node.outputCount }, (_, i) => `out ${i + 1}`);
-        },
-        renderContent(node) {
-            const count = node.outputCount || 2;
-            return `
-                <div class="node-content" style="padding:10px;">
-                    <label for="splitter-count-${node.id}" style="font-size:0.9rem;">Outputs: <span id="splitter-label-${node.id}">${count}</span></label>
-                    <input type="range" id="splitter-count-${node.id}" class="splitter-range" min="2" max="6" value="${count}" style="width: calc(100% - 20px); margin: 10px 10px 0 10px; box-sizing: border-box;">
-                </div>
-            `;
-        },
-        setupEventListeners(node) {
-            const slider = node.dom.querySelector('.splitter-range');
-            const label = node.dom.querySelector(`#splitter-label-${node.id}`);
-            const outputsContainer = node.dom.querySelector('.outputs');
-
-            slider.addEventListener('input', () => {
-                const newCount = parseInt(slider.value, 10);
-                node.outputCount = newCount;
-                label.textContent = newCount;
-
-                const type = nodeTypes[node.type];
-                const outputsArray = type.outputs(node);
-
-                app.connections = app.connections.filter(conn => {
-                    if (conn.fromNodeId === node.id) {
-                        const outputIndex = parseInt(conn.fromOutput.split(' ')[1], 10);
-                        return outputIndex <= newCount;
-                    }
-                    return true;
-                });
-
-                outputsContainer.innerHTML = outputsArray.map(name => `
-                    <div class="io-item" style="justify-content:flex-end;">
-                      <span style="margin-right:8px;">${name}</span>
-                      <div class="io-connector output" data-nodeid="${node.id}" data-type="output" data-name="${name}" title="Output: ${name}"></div>
-                    </div>`).join('');
-
-                outputsContainer.querySelectorAll('.io-connector').forEach(connector => {
-                    connector.addEventListener('mousedown', onConnectorClick);
-                });
-
-                redrawAllConnections();
-                saveStateToLocalStorage();
-            });
-        },
-        compute(inputs) {
-            return inputs["input"];
-        }
+      jsLogic: `function() { return this.value; }`,
+      pyLogic: `def get_output_text(node):\n    return node.get("value", "")`,
+      pyImports: [],
     },
     AddNode: {
-      title: "Add",
-      inputs: ["a", "b"],
-      outputs: ["sum"],
-      renderContent() {
-        return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Adds two numbers.</div>`;
-      },
-      compute(inputs) {
-        const a = inputs["a"];
-        const b = inputs["b"];
-        if (typeof a !== 'number' || typeof b !== 'number') return null;
-        return a + b;
-      }
+        definition: {
+          title: "Add",
+          inputs: ["a", "b"],
+          outputs: ["sum"],
+          renderContent() { return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Adds two numbers.</div>`; },
+          compute(inputs) {
+            const a = inputs["a"]; const b = inputs["b"];
+            if (typeof a !== 'number' || typeof b !== 'number') return null;
+            return a + b;
+          }
+        },
+        jsLogic: `async function(inputs) {
+            const a = inputs["a"]; const b = inputs["b"];
+            if (typeof a !== 'number' || typeof b !== 'number') return null;
+            return a + b;
+        }`,
+        pyLogic: `def compute_add(inputs):\n    a = inputs.get("a")\n    b = inputs.get("b")\n    if isinstance(a, (int, float)) and isinstance(b, (int, float)):\n        return a + b\n    return None`,
+        pyImports: [],
     },
     SubtractNode: {
-      title: "Subtract",
-      inputs: ["a", "b"],
-      outputs: ["difference"],
-      renderContent() {
-        return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Subtracts b from a.</div>`;
-      },
-      compute(inputs) {
-        const a = inputs["a"];
-        const b = inputs["b"];
-        if (typeof a !== 'number' || typeof b !== 'number') return null;
-        return a - b;
-      }
+        definition: {
+            title: "Subtract",
+            inputs: ["a", "b"],
+            outputs: ["difference"],
+            renderContent() { return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Subtracts b from a.</div>`; },
+            compute(inputs) { const a = inputs["a"]; const b = inputs["b"]; if (typeof a !== 'number' || typeof b !== 'number') return null; return a - b; }
+        },
+        jsLogic: `async function(inputs) { const a = inputs["a"]; const b = inputs["b"]; if (typeof a !== 'number' || typeof b !== 'number') return null; return a - b; }`,
+        pyLogic: `def compute_subtract(inputs):\n    a = inputs.get("a")\n    b = inputs.get("b")\n    if isinstance(a, (int, float)) and isinstance(b, (int, float)):\n        return a - b\n    return None`,
+        pyImports: [],
     },
     MultiplyNode: {
-      title: "Multiply",
-      inputs: ["x", "y"],
-      outputs: ["product"],
-      renderContent() {
-        return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Multiplies two numbers.</div>`;
-      },
-      compute(inputs) {
-        const x = inputs["x"];
-        const y = inputs["y"];
-        if (typeof x !== 'number' || typeof y !== 'number') return null;
-        return x * y;
-      }
+        definition: {
+            title: "Multiply",
+            inputs: ["x", "y"],
+            outputs: ["product"],
+            renderContent() { return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Multiplies two numbers.</div>`; },
+            compute(inputs) { const x = inputs["x"]; const y = inputs["y"]; if (typeof x !== 'number' || typeof y !== 'number') return null; return x * y; }
+        },
+        jsLogic: `async function(inputs) { const x = inputs["x"]; const y = inputs["y"]; if (typeof x !== 'number' || typeof y !== 'number') return null; return x * y; }`,
+        pyLogic: `def compute_multiply(inputs):\n    x = inputs.get("x")\n    y = inputs.get("y")\n    if isinstance(x, (int, float)) and isinstance(y, (int, float)):\n        return x * y\n    return None`,
+        pyImports: [],
     },
     DivideNode: {
-      title: "Divide",
-      inputs: ["a", "b"],
-      outputs: ["quotient"],
-      renderContent() {
-        return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Divides a by b.</div>`;
-      },
-      compute(inputs) {
-        const a = inputs["a"];
-        const b = inputs["b"];
-        if (typeof a !== 'number' || typeof b !== 'number' || b === 0) return null;
-        return a / b;
-      }
-    },
-    PowerNode: {
-        title: "Power",
-        inputs: ["a", "b"],
-        outputs: ["result"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;">Raises a to the power of b.</div>`;
+        definition: {
+            title: "Divide",
+            inputs: ["a", "b"],
+            outputs: ["quotient"],
+            renderContent() { return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Divides a by b.</div>`; },
+            compute(inputs) { const a = inputs["a"]; const b = inputs["b"]; if (typeof a !== 'number' || typeof b !== 'number' || b === 0) return null; return a / b; }
         },
-        compute(inputs) {
-            const a = inputs["a"];
-            const b = inputs["b"];
-            if (typeof a !== 'number' || typeof b !== 'number') return null;
-            return Math.pow(a, b);
-        }
-    },
-    SqrtNode: {
-        title: "Square Root",
-        inputs: ["number"],
-        outputs: ["result"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;">Calculates √ of a number.</div>`;
-        },
-        compute(inputs) {
-            const num = inputs["number"];
-            if (typeof num !== 'number' || num < 0) return null;
-            return Math.sqrt(num);
-        }
-    },
-    RandomNumberNode: {
-        title: "Random Number",
-        inputs: ["min", "max"],
-        outputs: ["number"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;">Outputs a random number.</div>`;
-        },
-        compute(inputs) {
-            const min = typeof inputs["min"] === 'number' ? inputs["min"] : 0;
-            const max = typeof inputs["max"] === 'number' ? inputs["max"] : 1;
-            if (min > max) return min;
-            return Math.random() * (max - min) + min;
-        }
-    },
-    StringLengthNode: {
-        title: "String Length",
-        inputs: ["text"],
-        outputs: ["length"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;">Outputs the length of a string.</div>`;
-        },
-        compute(inputs) {
-            const str = inputs["text"];
-            if (typeof str !== 'string') return null;
-            return str.length;
-        }
-    },
-    MergeTextNode: {
-      title: "Merge Text",
-      inputs: ["text1", "text2"],
-      outputs: ["mergedText"],
-      renderContent() {
-        return `<div class="node-content" style="padding:10px; font-size:0.9rem;">Merges two text strings.</div>`;
-      },
-      compute(inputs) {
-        const text1 = inputs["text1"] !== null ? String(inputs["text1"]) : "";
-        const text2 = inputs["text2"] !== null ? String(inputs["text2"]) : "";
-        return text1 + text2;
-      }
-    },
-    UppercaseNode: {
-        title: "To Uppercase",
-        inputs: ["string"],
-        outputs: ["text"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;">Converts text to UPPERCASE.</div>`;
-        },
-        compute(inputs) {
-            const str = inputs["string"];
-            if (typeof str !== 'string') return null;
-            return str.toUpperCase();
-        }
-    },
-    LowercaseNode: {
-        title: "To Lowercase",
-        inputs: ["string"],
-        outputs: ["text"],
-        renderContent() {
-            return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center;">Converts text to lowercase.</div>`;
-        },
-        compute(inputs) {
-            const str = inputs["string"];
-            if (typeof str !== 'string') return null;
-            return str.toLowerCase();
-        }
-    },
-    AskPollinationsNode: {
-      title: "Ask Pollinations",
-      inputs: ["prompt"],
-      outputs: ["response"],
-      renderContent(node) {
-        if (node.value === undefined) node.value = "";
-        return `
-          <div class="node-content">
-            <textarea class="node-input text-input" placeholder="Enter prompt or connect..." rows="3">${node.value}</textarea>
-            <div style="padding:5px 10px; font-size:0.8rem; color:#aaa;">Result: <span class="pollinations-result">...</span></div>
-            <div style="font-size: 0.7rem; color: #888; padding: 0 10px 8px; text-align: center; font-style: italic;">Uses an external service (pollinations.ai)</div>
-          </div>
-        `;
-      },
-      update(node) {
-        const textarea = node.dom.querySelector('textarea.text-input');
-        if (textarea) node.value = textarea.value;
-      },
-      async compute(inputs) {
-        const promptText = inputs["prompt"] !== null ? String(inputs["prompt"]) : (this.value || "");
-        if (this.dom) {
-            const resultSpan = this.dom.querySelector('.pollinations-result');
-            if (resultSpan) resultSpan.textContent = 'Loading...';
-        }
-
-        if (!promptText) {
-          if (this.dom) {
-            const resultSpan = this.dom.querySelector('.pollinations-result');
-            if (resultSpan) resultSpan.textContent = 'No prompt provided.';
-          }
-          return null;
-        }
-
-        try {
-          const encodedPrompt = encodeURIComponent(promptText);
-          const url = `https://text.pollinations.ai/${encodedPrompt}`;
-          const response = await fetch(url);
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-          }
-          const textResponse = await response.text();
-          if (this.dom) {
-            const resultSpan = this.dom.querySelector('.pollinations-result');
-            if(resultSpan) resultSpan.textContent = textResponse.substring(0, 50) + (textResponse.length > 50 ? '...' : '');
-          }
-          return textResponse;
-        } catch (error) {
-          console.error("Error fetching from Pollinations:", error);
-           if (this.dom) {
-            const resultSpan = this.dom.querySelector('.pollinations-result');
-            if(resultSpan) resultSpan.textContent = `Error: ${error.message}`;
-           }
-          return null;
-        }
-      }
+        jsLogic: `async function(inputs) { const a = inputs["a"]; const b = inputs["b"]; if (typeof a !== 'number' || typeof b !== 'number' || b === 0) return null; return a / b; }`,
+        pyLogic: `def compute_divide(inputs):\n    a = inputs.get("a")\n    b = inputs.get("b")\n    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b != 0:\n        return a / b\n    return None`,
+        pyImports: [],
     },
     PrintNode: {
-      title: "Print to Console",
-      inputs: ["input"],
-      outputs: [],
-      renderContent(node) {
-        return `<div class="node-content" style="padding:10px; font-size:0.9rem; text-align:center; min-height: 20px; color: #8a8;">(Logs to console)</div>`;
-      }
+      definition: {
+          title: "Print to Console",
+          inputs: ["input"],
+          outputs: [],
+          renderContent(node) { return `<div class="node-content" style="padding:10px; font-size:0.9rem; color: #8a8;">(Logs to console)</div>`; }
+      },
+      jsLogic: null,
+      pyLogic: null,
+      pyImports: [],
     },
     OutputNode: {
-        title: "Output",
-        inputs: ["input"],
-        outputs: [],
-        renderContent(node) {
-            return `
-                <div class="node-content-display" style="padding:10px; font-size:0.9rem; text-align:center; min-height: 20px; word-break: break-all;"></div>
-                <iframe class="output-iframe" id="iframe-${node.id}" style="display:none;" sandbox></iframe>
-            `;
-        }
+      definition: {
+          title: "Output",
+          inputs: ["input"],
+          outputs: [],
+          renderContent(node) {
+              return `
+                  <div class="node-content-display" style="padding:10px; font-size:0.9rem; min-height: 20px; word-break: break-all;"></div>
+                  <iframe class="output-iframe" id="iframe-${node.id}" style="display:none;" sandbox></iframe>
+              `;
+          }
+      },
+      jsLogic: null, 
+      pyLogic: null,
+      pyImports: [],
     }
   };
+
 
   const app = {
     nodes: [],
@@ -792,6 +535,14 @@
     lastPanX: 0,
     lastPanY: 0,
   };
+  
+  // Provide a global context for external nodes to access core app functionality.
+  window.AGGM_APP_CONTEXT = {
+      app: app,
+      get onConnectorClick() { return onConnectorClick; },
+      get redrawAllConnections() { return redrawAllConnections; },
+      get saveStateToLocalStorage() { return saveStateToLocalStorage; }
+  };
 
   const canvas = document.getElementById('canvas');
   const canvasContentWrapper = document.getElementById('canvas-content-wrapper');
@@ -806,6 +557,29 @@
   const projectNameInput = document.getElementById('project-name-input');
   const clearWorkspaceBtn = document.getElementById('clear-workspace-btn');
   const nodeCounter = document.getElementById('node-counter');
+
+  function registerNodes() {
+    for (const typeKey in BUILTIN_NODE_DEFINITIONS) {
+        const nodeDef = BUILTIN_NODE_DEFINITIONS[typeKey];
+        nodeTypes[typeKey] = nodeDef.definition;
+        nodeTypes[typeKey].jsLogic = nodeDef.jsLogic;
+        nodeTypes[typeKey].pyLogic = nodeDef.pyLogic;
+        nodeTypes[typeKey].pyImports = nodeDef.pyImports;
+    }
+
+    if (window.AGGM_CUSTOM_NODES) {
+        console.log("Loading custom nodes...");
+        for (const typeKey in window.AGGM_CUSTOM_NODES) {
+            const customNode = window.AGGM_CUSTOM_NODES[typeKey];
+            nodeTypes[typeKey] = customNode.definition;
+            nodeTypes[typeKey].jsLogic = customNode.jsLogic;
+            nodeTypes[typeKey].pyLogic = customNode.pyLogic;
+            nodeTypes[typeKey].pyImports = customNode.pyImports || [];
+        }
+    } else {
+        console.log("No custom nodes file found or file is empty.");
+    }
+  }
 
   function updateNodeCounter() {
     const count = app.nodes.length;
@@ -880,6 +654,10 @@
       dom: null,
       value: undefined
     };
+    if (type.defaultValue) {
+      node.value = JSON.parse(JSON.stringify(type.defaultValue));
+    }
+
     if (!id) {
         app.nodes.push(node);
     }
@@ -933,6 +711,7 @@
             if (type.update) type.update(node);
             saveStateToLocalStorage();
         });
+        input.addEventListener('mousedown', e => e.stopPropagation());
     });
 
     nodeEl.querySelector('.node-header').addEventListener('mousedown', onNodeDragStart);
@@ -1300,11 +1079,7 @@
       for (const inputName of requiredInputs) {
         const conn = app.connections.find(c => c.toNodeId === nodeId && c.toInput === inputName);
         if (!conn) {
-          if (node.type === 'AskPollinationsNode' && inputName === 'prompt') {
-            inputs[inputName] = node.value; 
-          } else {
-            inputs[inputName] = null;
-          }
+          inputs[inputName] = null;
           continue;
         }
         inputs[inputName] = await evaluateNodeOutput(conn.fromNodeId, conn.fromOutput, new Set(visited));
@@ -1317,35 +1092,16 @@
   async function runGraph() {
     const terminalNodes = app.nodes.filter(n => n.type === 'OutputNode' || n.type === 'PrintNode');
     if (terminalNodes.length === 0) {
-      const prevMessage = document.getElementById('user-message');
-      if(prevMessage) prevMessage.remove();
-      
-      const message = document.createElement('div');
-      message.id = 'user-message';
-      message.textContent = "No Output or Print Node found! Add one to see results.";
-      message.style.position = 'fixed';
-      message.style.top = '20px';
-      message.style.left = '50%';
-      message.style.transform = 'translateX(-50%)';
-      message.style.backgroundColor = 'var(--node-header-bg)';
-      message.style.color = 'white';
-      message.style.padding = '10px 20px';
-      message.style.borderRadius = '8px';
-      message.style.zIndex = '1000';
-      document.body.appendChild(message);
-      setTimeout(() => message.remove(), 3000);
+      alert("No Output or Print Node found! Add one to see results.");
       return;
     }
     
     app.nodes.forEach(node => {
-        if (node.type === 'OutputNode' || node.type === 'PrintNode') {
+        if (node.type === 'OutputNode') {
             const contentDiv = node.dom.querySelector('.node-content-display');
             if(contentDiv) contentDiv.textContent = 'Calculating...';
             const iframe = node.dom.querySelector('.output-iframe');
             if(iframe) iframe.style.display = 'none';
-        } else if (node.type === 'AskPollinationsNode') {
-            const resultSpan = node.dom.querySelector('.pollinations-result');
-            if (resultSpan) resultSpan.textContent = '...';
         }
     });
 
@@ -1359,17 +1115,15 @@
       if (termNode.type === 'PrintNode') {
           console.log(`Print Node ${termNode.id}:`, result);
           const contentDiv = termNode.dom.querySelector('.node-content');
-          if(contentDiv) {
-            contentDiv.textContent = `(Logged to console)`;
-          }
+          if(contentDiv) contentDiv.textContent = `(Logged to console)`;
       } else { // OutputNode
             const contentDiv = termNode.dom.querySelector('.node-content-display');
             const iframe = termNode.dom.querySelector('.output-iframe');
             
-            if (typeof result === 'string' && (result.trim().startsWith('<') || result.trim().endsWith('>'))) {
+            if (typeof result === 'string' && (result.trim().startsWith('<') && result.trim().endsWith('>'))) {
                 contentDiv.style.display = 'none';
                 iframe.style.display = 'block';
-                iframe.srcdoc = result;
+                iframe.srcdoc = `<html><head><style>body{font-family: sans-serif; color: #333;}</style></head><body>${result}</body></html>`;
             } else {
                 contentDiv.style.display = 'block';
                 iframe.style.display = 'none';
@@ -1390,21 +1144,33 @@
     return {
       nodes: app.nodes.map(node => {
         const { dom, ...rest } = node;
-        const exportedNode = { ...rest };
-        
-        if (node.value !== undefined) {
-          exportedNode.value = node.value;
-        }
-        if (node.type === 'SplitterNode' && node.outputCount !== undefined) {
-            exportedNode.outputCount = node.outputCount;
-        }
-        return exportedNode;
+        return { ...rest };
       }),
       connections: app.connections
     };
   }
   
   function generateJsCode(graphData, projectName) {
+    const usedNodeTypes = [...new Set(graphData.nodes.map(n => n.type))];
+    let runtimeLogic = '';
+
+    usedNodeTypes.forEach(typeKey => {
+        const typeDef = nodeTypes[typeKey];
+        if (!typeDef || !typeDef.jsLogic) return;
+        
+        let logicString = typeDef.jsLogic;
+        
+        runtimeLogic += `        "${typeKey}": {\n`;
+        if (typeDef.getOutput) {
+            runtimeLogic += `            getOutput: ${logicString}`;
+        } else if (typeDef.compute) {
+            runtimeLogic += `            compute: ${logicString},\n`;
+            const inputs = typeof typeDef.inputs === 'function' ? typeDef.inputs({ outputCount: 2 }) : typeDef.inputs;
+            runtimeLogic += `            inputs: ${JSON.stringify(inputs)}`;
+        }
+        runtimeLogic += `\n        },\n`;
+    });
+    
     return `
 // Project: ${projectName}
 // Created using Adolfo GM's Node Graph Editor
@@ -1414,146 +1180,9 @@
     const nodeGraph = ${JSON.stringify(graphData, null, 2)};
 
     const runtimeNodeTypes = {
-        NumberNode: {
-            getOutput: function() { return this.value; }
-        },
-        TextNode: {
-            getOutput: function() { return this.value; }
-        },
-        TitleNode: {
-            getOutput: function() { return \`<h1 style="font-size: \${this.value.fontSize}; font-family: '\${this.value.fontFamily}', sans-serif;">\${this.value.content}</h1>\`; }
-        },
-        ParagraphNode: {
-            getOutput: function() { return \`<p style="margin: 0; padding: 0;">\${this.value}</p>\`; }
-        },
-        CurrentDateNode: {
-            getOutput: function() {
-                const date = new Date();
-                return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
-            }
-        },
-        CurrentTimeNode: {
-            getOutput: function() {
-                const date = new Date();
-                return String(date.getHours()).padStart(2, '0') + ':' + String(date.getMinutes()).padStart(2, '0') + ':' + String(date.getSeconds()).padStart(2, '0');
-            }
-        },
-        SplitterNode: {
-            inputs: ["input"],
-            compute: function(inputs) { return inputs["input"]; }
-        },
-        AddNode: {
-            inputs: ["a", "b"],
-            compute: function(inputs) {
-                const a = inputs["a"]; const b = inputs["b"];
-                if (typeof a !== 'number' || typeof b !== 'number') return null;
-                return a + b;
-            }
-        },
-        SubtractNode: {
-            inputs: ["a", "b"],
-            compute: function(inputs) {
-                const a = inputs["a"]; const b = inputs["b"];
-                if (typeof a !== 'number' || typeof b !== 'number') return null;
-                return a - b;
-            }
-        },
-        MultiplyNode: {
-            inputs: ["x", "y"],
-            compute: function(inputs) {
-                const x = inputs["x"]; const y = inputs["y"];
-                if (typeof x !== 'number' || typeof y !== 'number') return null;
-                return x * y;
-            }
-        },
-        DivideNode: {
-            inputs: ["a", "b"],
-            compute: function(inputs) {
-                const a = inputs["a"]; const b = inputs["b"];
-                if (typeof a !== 'number' || typeof b !== 'number' || b === 0) return null;
-                return a / b;
-            }
-        },
-        PowerNode: {
-            inputs: ["a", "b"],
-            compute: function(inputs) {
-                const a = inputs["a"]; const b = inputs["b"];
-                if (typeof a !== 'number' || typeof b !== 'number') return null;
-                return Math.pow(a, b);
-            }
-        },
-        SqrtNode: {
-            inputs: ["number"],
-            compute: function(inputs) {
-                const num = inputs["number"];
-                if (typeof num !== 'number' || num < 0) return null;
-                return Math.sqrt(num);
-            }
-        },
-        RandomNumberNode: {
-            inputs: ["min", "max"],
-            compute: function(inputs) {
-                const min = typeof inputs["min"] === 'number' ? inputs["min"] : 0;
-                const max = typeof inputs["max"] === 'number' ? inputs["max"] : 1;
-                if (min > max) return min;
-                return Math.random() * (max - min) + min;
-            }
-        },
-        StringLengthNode: {
-            inputs: ["text"],
-            compute: function(inputs) {
-                const str = inputs["text"];
-                if (typeof str !== 'string') return null;
-                return str.length;
-            }
-        },
-        MergeTextNode: {
-            inputs: ["text1", "text2"],
-            compute: function(inputs) {
-                const text1 = inputs["text1"] !== null ? String(inputs["text1"]) : "";
-                const text2 = inputs["text2"] !== null ? String(inputs["text2"]) : "";
-                return text1 + text2;
-            }
-        },
-        UppercaseNode: {
-            inputs: ["string"],
-            compute: function(inputs) {
-                const str = inputs["string"];
-                if (typeof str !== 'string') return null;
-                return str.toUpperCase();
-            }
-        },
-        LowercaseNode: {
-            inputs: ["string"],
-            compute: function(inputs) {
-                const str = inputs["string"];
-                if (typeof str !== 'string') return null;
-                return str.toLowerCase();
-            }
-        },
-        AskPollinationsNode: {
-            inputs: ["prompt"],
-            compute: async function(inputs) {
-                const promptText = inputs["prompt"] !== null ? String(inputs["prompt"]) : (this.value || "");
-                if (!promptText) { return null; }
-                try {
-                    const encodedPrompt = encodeURIComponent(promptText);
-                    const url = \`https://text.pollinations.ai/\${encodedPrompt}\`;
-                    const response = await fetch(url);
-                    if (!response.ok) { throw new Error(\`HTTP error! status: \${response.status}\`); }
-                    return await response.text();
-                } catch (error) {
-                    console.error("Error fetching from Pollinations:", error);
-                    return null;
-                }
-            }
-        },
-        PrintNode: {
-            inputs: ["input"]
-        },
-        OutputNode: {
-            inputs: ["input"]
-        }
+${runtimeLogic}
+        PrintNode: { inputs: ["input"] },
+        OutputNode: { inputs: ["input"] }
     };
 
     const evaluatedOutputs = new Map();
@@ -1588,11 +1217,7 @@
             for (const inputName of requiredInputs) {
                 const conn = nodeGraph.connections.find(c => c.toNodeId === nodeId && c.toInput === inputName);
                 if (!conn) {
-                    if (node.type === 'AskPollinationsNode' && inputName === 'prompt') {
-                        inputs[inputName] = node.value;
-                    } else {
-                        inputs[inputName] = null;
-                    }
+                    inputs[inputName] = null;
                     continue;
                 }
                 inputs[inputName] = await evaluateNodeOutput(conn.fromNodeId, conn.fromOutput, new Set(visited));
@@ -1630,162 +1255,58 @@
 
     await run();
 
-})();
-`;
+})();`;
   }
 
   function generatePythonCode(graphData, projectName) {
+    const usedNodeTypes = [...new Set(graphData.nodes.map(n => n.type))];
+    let pythonFunctions = '';
+    let nodeLogicDict = '';
+    const allPyImports = new Set(['json', 'math', 'random']);
+    
+    usedNodeTypes.forEach((typeKey) => {
+        const typeDef = nodeTypes[typeKey];
+        if (!typeDef || !typeDef.pyLogic) return;
+
+        if (typeDef.pyImports && typeDef.pyImports.length > 0) {
+            typeDef.pyImports.forEach(imp => allPyImports.add(imp));
+        }
+        
+        let logicString = typeDef.pyLogic;
+        let pyFuncName = logicString.split(' ')[1].split('(')[0];
+        
+        pythonFunctions += `${logicString}\n\n`;
+
+        nodeLogicDict += `    "${typeKey}": {`;
+        if (typeDef.getOutput) {
+            nodeLogicDict += `"get_output": ${pyFuncName}`;
+        } else if (typeDef.compute) {
+            nodeLogicDict += `"compute": ${pyFuncName}, `;
+            const inputs = typeof typeDef.inputs === 'function' ? typeDef.inputs({ outputCount: 2 }) : typeDef.inputs;
+            nodeLogicDict += `"inputs": ${JSON.stringify(inputs)}`;
+        }
+        nodeLogicDict += `},\n`;
+    });
+
+    const importStatements = [...allPyImports].map(imp => imp.startsWith('from') ? imp : `import ${imp}`).join('\n');
+    
     return `
 # Project: ${projectName}
 # Created using Adolfo GM's Node Graph Editor
 # This is a self-contained, runnable Python script.
-# NOTE: Please install the 'requests' library using 'pip install requests' before running this script.
+# NOTE: Some nodes may require non-standard libraries (e.g., 'requests').
 
-import json
-import requests
-import math
-import random
-from datetime import datetime
+${importStatements}
 
 # --- Project and Graph Data ---
 projectName = "${projectName}"
 node_graph = ${JSON.stringify(graphData, null, 2)}
 
 # --- Node Logic Definitions ---
-def get_output_number(node):
-    return node.get("value", 0)
-
-def get_output_text(node):
-    return node.get("value", "")
-    
-def get_output_title(node):
-    val = node.get("value", {})
-    content = val.get("content", "Title")
-    font_size = val.get("fontSize", "2em")
-    font_family = val.get("fontFamily", "Arial")
-    return f'<h1 style="font-size: {font_size}; font-family: \\'{font_family}\\', sans-serif;">{content}</h1>'
-
-def get_output_paragraph(node):
-    content = node.get("value", "This is a paragraph.")
-    return f'<p style="margin: 0; padding: 0;">{content}</p>'
-
-def get_output_date(node):
-    return datetime.now().strftime('%Y-%m-%d')
-
-def get_output_time(node):
-    return datetime.now().strftime('%H:%M:%S')
-
-def compute_splitter(inputs):
-    return inputs.get("input")
-
-def compute_add(inputs):
-    a = inputs.get("a")
-    b = inputs.get("b")
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return a + b
-    return None
-
-def compute_subtract(inputs):
-    a = inputs.get("a")
-    b = inputs.get("b")
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return a - b
-    return None
-
-def compute_multiply(inputs):
-    x = inputs.get("x")
-    y = inputs.get("y")
-    if isinstance(x, (int, float)) and isinstance(y, (int, float)):
-        return x * y
-    return None
-
-def compute_divide(inputs):
-    a = inputs.get("a")
-    b = inputs.get("b")
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)) and b != 0:
-        return a / b
-    return None
-    
-def compute_power(inputs):
-    a = inputs.get("a")
-    b = inputs.get("b")
-    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
-        return math.pow(a, b)
-    return None
-
-def compute_sqrt(inputs):
-    n = inputs.get("number")
-    if isinstance(n, (int, float)) and n >= 0:
-        return math.sqrt(n)
-    return None
-
-def compute_random_number(inputs):
-    min_val = inputs.get("min")
-    max_val = inputs.get("max")
-    min_n = min_val if isinstance(min_val, (int, float)) else 0
-    max_n = max_val if isinstance(max_val, (int, float)) else 1
-    if min_n > max_n:
-        return min_n
-    return random.uniform(min_n, max_n)
-    
-def compute_string_length(inputs):
-    s = inputs.get("text")
-    if isinstance(s, str):
-        return len(s)
-    return None
-
-def compute_merge_text(inputs):
-    text1 = str(inputs.get("text1", ""))
-    text2 = str(inputs.get("text2", ""))
-    return text1 + text2
-
-def compute_uppercase(inputs):
-    s = inputs.get("string")
-    if isinstance(s, str):
-        return s.upper()
-    return None
-
-def compute_lowercase(inputs):
-    s = inputs.get("string")
-    if isinstance(s, str):
-        return s.lower()
-    return None
-
-def compute_ask_pollinations(inputs, node):
-    prompt = inputs.get("prompt") or node.get("value", "")
-    if not prompt:
-        print("PollinationsError: No prompt provided.")
-        return None
-    try:
-        encoded_prompt = requests.utils.quote(prompt)
-        url = f"https://text.pollinations.ai/{encoded_prompt}"
-        response = requests.get(url)
-        response.raise_for_status()
-        return response.text
-    except requests.exceptions.RequestException as e:
-        print(f"PollinationsError: {e}")
-        return None
+${pythonFunctions}
 
 node_logic = {
-    "NumberNode": {"get_output": get_output_number},
-    "TextNode": {"get_output": get_output_text},
-    "TitleNode": {"get_output": get_output_title},
-    "ParagraphNode": {"get_output": get_output_paragraph},
-    "CurrentDateNode": {"get_output": get_output_date},
-    "CurrentTimeNode": {"get_output": get_output_time},
-    "SplitterNode": {"compute": compute_splitter, "inputs": ["input"]},
-    "AddNode": {"compute": compute_add, "inputs": ["a", "b"]},
-    "SubtractNode": {"compute": compute_subtract, "inputs": ["a", "b"]},
-    "MultiplyNode": {"compute": compute_multiply, "inputs": ["x", "y"]},
-    "DivideNode": {"compute": compute_divide, "inputs": ["a", "b"]},
-    "PowerNode": {"compute": compute_power, "inputs": ["a", "b"]},
-    "SqrtNode": {"compute": compute_sqrt, "inputs": ["number"]},
-    "RandomNumberNode": {"compute": compute_random_number, "inputs": ["min", "max"]},
-    "StringLengthNode": {"compute": compute_string_length, "inputs": ["text"]},
-    "MergeTextNode": {"compute": compute_merge_text, "inputs": ["text1", "text2"]},
-    "UppercaseNode": {"compute": compute_uppercase, "inputs": ["string"]},
-    "LowercaseNode": {"compute": compute_lowercase, "inputs": ["string"]},
-    "AskPollinationsNode": {"compute": compute_ask_pollinations, "inputs": ["prompt"]},
+${nodeLogicDict}
     "PrintNode": {"inputs": ["input"]},
     "OutputNode": {"inputs": ["input"]}
 }
@@ -1834,10 +1355,7 @@ def evaluate_node_output(node_id, output_name, visited=None):
             conn = next((c for c in node_graph["connections"] if c["toNodeId"] == node_id and c["toInput"] == input_name), None)
             
             if not conn:
-                if node_type == "AskPollinationsNode" and input_name == "prompt":
-                    inputs[input_name] = node.get("value")
-                else:
-                    inputs[input_name] = None
+                inputs[input_name] = None
                 continue
 
             inputs[input_name] = evaluate_node_output(conn["fromNodeId"], conn["fromOutput"], visited.copy())
@@ -1996,7 +1514,10 @@ if __name__ == "__main__":
   function renderSidebar(filter = '') {
     nodeList.innerHTML = '';
     const lowerCaseFilter = filter.toLowerCase();
-    Object.entries(nodeTypes).forEach(([key, type]) => {
+    
+    const sortedNodeTypes = Object.entries(nodeTypes).sort((a, b) => a[1].title.localeCompare(b[1].title));
+
+    sortedNodeTypes.forEach(([key, type]) => {
       if (type.title.toLowerCase().includes(lowerCaseFilter)) {
         const el = document.createElement('div');
         el.classList.add('node-type');
@@ -2009,7 +1530,9 @@ if __name__ == "__main__":
   }
   
   function initialize() {
+    registerNodes();
     renderSidebar();
+
     runBtn.onclick = runGraph;
     exportProjectBtn.onclick = exportProjectToZip;
     importNodesBtn.onclick = importNodes;
@@ -2033,10 +1556,11 @@ if __name__ == "__main__":
     });
 
     loadStateFromLocalStorage();
-    updateNodeCounter(); // Initial count on load
+    updateNodeCounter();
   }
 
   initialize();
+});
 </script>
 
 </body>
